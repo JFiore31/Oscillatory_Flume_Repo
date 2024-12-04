@@ -8,16 +8,22 @@ const int enablePIN = 11;
 const int DEenable = 6; //Driver Output Enable on MAX485. HIGH to Enable
 const int REenable = 4; //Reciever Output Enable on MAX485. LOW to Enable
 const int input1 = 8;
-int myTurn = 1;
 
-uint32_t number = 1;
-uint8_t endBytes[] = {0xff, 0xff, 0xff}; //Set the ending characters that need to be sent when sending things to touchpad per Nextion User Guide
+//Strings to hold data incoming from peripherals
 String dfd = ""; //Data from display
-int incomingByte = 0;
+String dfm = ""; //Data from motor
+
+//variables to store motor state management
 uint8_t enable = 0; //Can take a value of 0 for off and 1 for on
 uint8_t direction = 0; //Can take a value of 0 for CW and 1 for CCW
-const int steps = 300; //The amount of steps the motor has to turn
+int steps = 300; //The amount of steps the motor has to turn
+int motorSpeed = 0;
+int motorAccel = 0;
+
 const unsigned long defaultTimeout = 500;
+
+//Wave parameter variables as prescribed on Nextion
+uint8_t endBytes[] = {0xff, 0xff, 0xff}; //Set the ending characters that need to be sent when sending things to touchpad per Nextion User Guide. We will try to never send to Nextion though
 int speed = 0; //Speed of wave sent from Nextion
 int frequency = 0; //Frequency of wave sent from Nextion
 int amplitude = 0; //Amplitude of wave sent from Nextion
@@ -43,66 +49,15 @@ void setup() {
   digitalWrite(DEenable, LOW); //Disable data being sent to motor
   digitalWrite(REenable, LOW); //Enable data to be sent to Arduino
 
-  // configurePage();
+  // configurePage(); //We may run into errors later where if the touchpad looses power the uC and touchpad will not be in sync anymore which would be bad. Neglect for right now
   delay(1000);
   enable = 0;
-
-  //  // Set initial motor parameters
-  // setMotorParameters();
-
-  // // Spin the motor clockwise for the specified number of steps
-  // spinClockwise(steps);
-  // delay(defaultTimeout);  // Wait for the motion to complete
-
-  // // Stop the motor
-  // stopMotion();
-  // delay(defaultTimeout);  // Wait before next operation
-
-  // // Spin the motor counterclockwise for the specified number of steps
-  // spinCounterClockwise(steps);
-  // delay(defaultTimeout);  // Wait for the motion to complete
-
-  // // Stop the motor again
-  // stopMotion();
 }
 
 
 void loop() {
-  // digitalWrite(input1, LOW);
-  // delay(2000);
-  // digitalWrite(input1, HIGH);
-  // delay(3000);
-  // if(direction == 0){
-  //   //Serial1.print("START CCW 200\r");
-  //   //Serial1.write('\r');
-  //   delay(300);
-  //   direction = 1;
-  //   // digitalWrite(input1, LOW);
-  //   // delay(2000);
-  //   // digitalWrite(input1, HIGH);
-  // } else {
-  //   //Serial1.print("START CW 200\r");
-  //   //Serial1.write('\r');
-  //   delay(300);
-  //   direction = 0;
-  //   // digitalWrite(input1, LOW);
-  //   // delay(2000);
-  //   // digitalWrite(input1, HIGH);
-  // }
-  //digitalWrite(input1, LOW);
-  // Serial1.print("t1.txt=");
-  // Serial1.print(String("\"go\""));
-  // Serial1.write(endBytes, sizeof(endBytes));
-  // delay(200);
-  // Serial1.print("get t1.txt");
-  // Serial1.write(endBytes, sizeof(endBytes));
-  //Serial.print("C:CCTR?");
-  // if(Serial1.available() >= 0){
-  //   //digitalWrite(LED_BUILTIN, HIGH);
-  //   //recieveInput();
-  // } else {}
-  delay(5000);
-  if(myTurn == 1){
+  //function to send the serial commands to turn on and spin the motor. Only entered when a complete message from the Nextion is confirmed.  
+  if(enable == 1) {
     digitalWrite(REenable, HIGH); //Disable incoming data from MAX485
     digitalWrite(DEenable, HIGH); //Enable outgoing data from MAX485
     digitalWrite(input1, HIGH);
@@ -130,25 +85,16 @@ void loop() {
     // Serial1.println("@0G1");
     // Serial1.write("\r");
     // delay(500);
-    Serial.print("I sent");
-
-    Serial1.print("@1$");
-    Serial1.write('\r');
-    delay(500);
     digitalWrite(DEenable, LOW); //Disable outgoing data from MAX485
     digitalWrite(REenable, LOW); //Enable incoming data from MAX485
     digitalWrite(input1, LOW);
     //digitalWrite(enablePIN, HIGH);
-    myTurn = 0;
   }
 
   //Check for updates from stepper motor
   while(Serial1.available()){ //Only entered if there is data on the Hardware Serial RX FIFO
-    incomingByte = Serial1.read(); //Read a single byte from Stepper Motor and save it to variable incomingByte
-    // Serial.print("I received: ");
-    // Serial.println(incomingByte, HEX);
-    //myTurn = 1;
-
+    dfm += char(Serial1.read()); //Read a single byte from Stepper Motor and save it to String data from motor
+    //This will be one of 3 things: 1) Junk 2) The address of the motor which should not change 3)a confirmation it is running if I ask for one
   }
 
   //Check for updates from Touchpad
@@ -219,19 +165,16 @@ void loop() {
       //The uC has been sent something that is not a turn on or turn off command. Probably noise. Neglect it.
       dfd=""; 
     }
-    //incomingByte = Serial2.read(); //Read a single Byte from Touchpad and save it to variable incoming Byte
   }
   delay(150);
-  // if (enable ==1) {
-
-  //   // read the incoming byte:
-  //   incomingByte = Serial1.read();
-
-  //   // say what you got:
-  // }
-  // delay(1000);
 }
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////                                                                                                                                  /////////
+//////////                                                      ~END OF MAIN~                                                               /////////
+//////////                                                                                                                                  /////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//Helped function that will digest hex values sent to uC from Nextion
 void readParams() {
     dfd += char(Serial2.read());
     if(dfd.length()>3 && dfd.substring((dfd.length()-3),dfd.length()) == "C:C" && readingValue == 0){
@@ -298,60 +241,23 @@ void setMotorParameters() {
   delay(defaultTimeout);
 }
 
-// Function to spin the motor clockwise
-void spinClockwise(int numSteps) {
-  Serial1.print("@0+");  // Set direction clockwise
-  Serial1.println();
-  delay(defaultTimeout);
 
-  Serial1.print("@0G1");  // Start the motor (Index 1)
-  Serial1.println();
-  delay(defaultTimeout);
-}
+// Function to emergency stop the motor (hard limit). We currently do not have a switch input for this, but generally a good idea.
+// void stopMotion() {
+//   Serial1.print("@0H");  // Stop motion (Hard Limit)
+//   Serial1.println();
+//   delay(defaultTimeout);
+// }
 
-// Function to spin the motor counterclockwise
-void spinCounterClockwise(int numSteps) {
-  Serial1.print("@0-");  // Set direction counterclockwise
-  Serial1.println();
-  delay(defaultTimeout);
-
-  Serial1.print("@0G1");  // Start the motor (Index 1)
-  Serial1.println();
-  delay(defaultTimeout);
-}
-
-// Function to stop the motor (hard limit)
-void stopMotion() {
-  Serial1.print("@0H");  // Stop motion (Hard Limit)
-  Serial1.println();
-  delay(defaultTimeout);
-}
-
-void configurePage(){
-  Serial2.write(0x70);
-  Serial2.write(0x61);
-  Serial2.write(0x67);
-  Serial2.write(0x65);
-  Serial2.write(0x20);
-  Serial2.write(0x30);
-  //Serial2.print("page 0");
-  Serial2.write(endBytes, sizeof(endBytes));
-}
-
-void recieveInput() {
-  dfd += char(Serial.read());
-  if(dfd.length()>3 && dfd.substring(0,3) !="C:C") {
-    dfd=""; //Throw away junk RX data for right now
-  } else {
-    if(dfd.substring((dfd.length()-1),dfd.length()) == "?") { //Confirms it is a valid command
-      String message = dfd.substring(3,6);
-      //Serial.print(message);
-      //Serial.print("t1.txt=");
-      //Serial.print(String("\"go\""));
-      //Serial.write(endBytes, sizeof(endBytes));
-    }
-    //if(){ //Confirms it is a value being sent
-        //Do Stuff with the value I recieve after I send a get function
-    //}
-  }
-}
+//It may be a good idea to include a function that will put the nextion and touchpad back in sync. They may get out of sync if one of them looses power
+//Currently not implemented
+// void configurePage(){
+//   Serial2.write(0x70); //Byte by Byte version of saying "page 0"
+//   Serial2.write(0x61);
+//   Serial2.write(0x67);
+//   Serial2.write(0x65);
+//   Serial2.write(0x20);
+//   Serial2.write(0x30);
+//   //Serial2.print("page 0");
+//   Serial2.write(endBytes, sizeof(endBytes));
+// }
