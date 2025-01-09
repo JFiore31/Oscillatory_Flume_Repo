@@ -307,7 +307,7 @@ void solveMotionPlan() {
   float BLU = .18/8*.018*2*PI/360;
   motorSteps = (int)(waveAmp/BLU); //I believe this to be the number of pulses to be sent. Truncated down introduces some error
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  float completeTime = (1 / waveFrequency) / 2; //We want the complete time to be half the period of the wave
+  float completeTime = (1 / waveFrequency) / 2 * 1000; //We want the complete time to be half the period of the wave. Sent to motor as uSeconds, so multiple by 1000
   motorCompleteTime = (int)completeTime; //Will always truncate down towards 0. Introduces error. Neglect
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   //Now that all math is done, send the values to motor
